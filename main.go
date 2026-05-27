@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+	"golang.org/x/net/html"
 )
 
 func main() {
@@ -16,11 +16,25 @@ func main() {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Read error:", err)
-		return
+	doc, err := html.Parse(resp.Body)
+	links := extractLinks(doc)
+
+	for _, link := range links{
+		fmt.Println((link))
 	}
 
-	fmt.Println(string(body))
+}
+
+func extractLinks(n *html.Node)[]string{
+	var links []string
+	if n.Type == html.ElementNode && n.Data == "a"{
+		for _, attr := range n.Attr{
+			if attr.Key=="href"{
+				links = append(links, attr.Val)
+			}		}
+	}
+	for child := n.FirstChild; child !=nil; child = child.NextSibling{
+		links = append(links, extractLinks(child)...)
+	}
+	return links
 }
