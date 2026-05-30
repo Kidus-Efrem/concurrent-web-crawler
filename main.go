@@ -8,30 +8,49 @@ import (
 	"golang.org/x/net/html"
 )
 
+type CrawlItem struct {
+	URL   string
+	Depth int
+}
+
 func main() {
 	startURL := "https://example.com"
+	maxDepth := 2
 
-	queue := []string{startURL}
-	visited := make(map[string]bool)
-
-	base, err := url.Parse(startURL)
+	startParsed, err := url.Parse(startURL)
 	if err != nil {
-		fmt.Println("Base URL parse error:", err)
+		fmt.Println("Start URL parse error:", err)
 		return
 	}
 
+	queue := []CrawlItem{
+		{
+			URL:   startURL,
+			Depth: 0,
+		},
+	}
+
+	visited := make(map[string]bool)
+
 	for len(queue) > 0 {
-		// BFS pop front
-		currentURL := queue[0]
+
+		current := queue[0]
 		queue = queue[1:]
 
-		// Skip already visited URLs
+		currentURL := current.URL
+		currentDepth := current.Depth
+
+		if currentDepth > maxDepth {
+			continue
+		}
+
 		if visited[currentURL] {
 			continue
 		}
+
 		visited[currentURL] = true
 
-		fmt.Println("Visiting:", currentURL)
+		fmt.Printf("Visiting: %s (depth=%d)\n", currentURL, currentDepth)
 
 		resp, err := http.Get(currentURL)
 		if err != nil {
@@ -47,11 +66,15 @@ func main() {
 			continue
 		}
 
+		base, err := url.Parse(currentURL)
+		if err != nil {
+			continue
+		}
+
 		links := extractLinks(doc)
 
 		for _, link := range links {
 
-			// Skip invalid links
 			if link == "" {
 				continue
 			}
@@ -75,7 +98,15 @@ func main() {
 
 			resolved := base.ResolveReference(parsedLink)
 
-			queue = append(queue, resolved.String())
+			// Stay inside original domain
+			if resolved.Host != startParsed.Host {
+				continue
+			}
+
+			queue = append(queue, CrawlItem{
+				URL:   resolved.String(),
+				Depth: currentDepth + 1,
+			})
 		}
 	}
 }
@@ -83,20 +114,14 @@ func main() {
 func extractLinks(n *html.Node) []string {
 	var links []string
 
-	// Check if node is an <a> tag
 	if n.Type == html.ElementNode && n.Data == "a" {
-
-		// Look through attributes
 		for _, attr := range n.Attr {
-
-			// Find href
 			if attr.Key == "href" {
 				links = append(links, attr.Val)
 			}
 		}
 	}
 
-	// Traverse child nodes recursively
 	for child := n.FirstChild; child != nil; child = child.NextSibling {
 		links = append(links, extractLinks(child)...)
 	}
